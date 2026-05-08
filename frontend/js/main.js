@@ -1,19 +1,12 @@
 /* ══════════════════════════════════════════════════════
    SOS Animal Help — main.js
-   Integração PIX via Veno Payments (backend próprio)
+   Integração PIX via Veno Payments (Netlify Functions)
    ══════════════════════════════════════════════════════ */
-
-// ────────────────────────────────────────────────────
-//  ⚙️  CONFIGURAÇÃO — altere apenas esta linha
-//  Em produção: 'https://seu-backend.railway.app'
-//  Em local:    'http://localhost:3000'
-// ────────────────────────────────────────────────────
-const BACKEND_URL = 'http://localhost:3000';
 
 /* ── STATE ── */
 let selectedAmount  = 0;
-let currentPixId    = null;   // guarda o id do PIX criado (para polling)
-let pollingInterval = null;   // referência do setInterval de polling
+let currentPixId    = null;
+let pollingInterval = null;
 
 /* ── IMPACT DESCRIPTIONS ── */
 const impacts = {
@@ -62,6 +55,7 @@ function confirmDonate() {
   showOrderBump(selectedAmount);
 }
 
+
 /* ══════════════════════════════════════════════════════
    ORDER BUMP
    ══════════════════════════════════════════════════════ */
@@ -94,16 +88,15 @@ function closeBump() {
 }
 
 /* ══════════════════════════════════════════════════════
-   PIX MODAL — gera PIX real via backend
+   PIX MODAL — gera PIX real via Netlify Function
    ══════════════════════════════════════════════════════ */
 async function abrirPixModal(valorEmReais, label) {
-  // Abre o modal já com loading
   mostrarModalLoading(valorEmReais, label);
 
   try {
     const centavos = toCentavos(valorEmReais);
 
-    const response = await fetch(`${BACKEND_URL}/criar-pix`, {
+    const response = await fetch('/.netlify/functions/criar-pix', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -120,11 +113,11 @@ async function abrirPixModal(valorEmReais, label) {
     const pix = await response.json();
     currentPixId = pix.id;
 
-    // Preenche o modal com os dados reais
     preencherModalPix(pix, valorEmReais, label);
 
-    // Inicia polling para detectar pagamento automaticamente
-    iniciarPolling(pix.id);
+    if (pix.id) {
+      iniciarPolling(pix.id);
+    }
 
   } catch (err) {
     console.error('[abrirPixModal] Erro:', err);
@@ -140,7 +133,6 @@ function mostrarModalLoading(valorEmReais, label) {
   document.getElementById('pix-qr').innerHTML       =
     '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-size:0.82rem">⏳ Gerando QR Code...</div>';
 
-  // Desabilita botão copiar durante o loading
   const btnCopy = document.querySelector('.btn-copy');
   if (btnCopy) { btnCopy.disabled = true; btnCopy.textContent = '...'; }
 
@@ -154,13 +146,16 @@ function preencherModalPix(pix, valorEmReais, label) {
   document.getElementById('pix-desc').textContent   =
     `Você está doando ${label}. Obrigado por salvar vidas! 🐾`;
 
-  // Copia e Cola
-  document.getElementById('pix-key').textContent = pix.pix_copy_paste;
+  document.getElementById('pix-key').textContent = pix.pix_copy_paste || '';
 
-  // QR Code (base64)
   if (pix.qr_code_image) {
+    // A API pode retornar base64 puro ou uma URL completa
+    const src = pix.qr_code_image.startsWith('http')
+      ? pix.qr_code_image
+      : `data:image/png;base64,${pix.qr_code_image}`;
+
     document.getElementById('pix-qr').innerHTML =
-      `<img src="data:image/png;base64,${pix.qr_code_image}"
+      `<img src="${src}"
             style="width:200px;height:200px;border-radius:8px;"
             alt="QR Code PIX"/>`;
   } else {
@@ -168,11 +163,9 @@ function preencherModalPix(pix, valorEmReais, label) {
       '<span style="font-size:0.78rem;color:#aaa">QR Code indisponível<br/>Use o Copia e Cola</span>';
   }
 
-  // Reabilita botão copiar
   const btnCopy = document.querySelector('.btn-copy');
   if (btnCopy) { btnCopy.disabled = false; btnCopy.textContent = 'Copiar'; }
 
-  // Exibe expiração se existir
   if (pix.expires_at) {
     const expira = new Date(pix.expires_at);
     const hora   = expira.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -216,7 +209,6 @@ function copyPix() {
       btn.style.background = '';
     }, 2200);
   }).catch(() => {
-    // Fallback para navegadores sem Clipboard API
     const el = document.createElement('textarea');
     el.value = key;
     document.body.appendChild(el);
@@ -229,10 +221,10 @@ function copyPix() {
 
 /* ══════════════════════════════════════════════════════
    POLLING — verifica se o PIX foi pago automaticamente
-   Consulta o backend a cada 5s por até 10 minutos
+   Consulta /.netlify/functions/status-pix a cada 5s
    ══════════════════════════════════════════════════════ */
 function iniciarPolling(pixId) {
-  pararPolling(); // limpa qualquer polling anterior
+  pararPolling();
 
   let tentativas = 0;
   const MAX_TENTATIVAS = 120; // 120 × 5s = 10 minutos
@@ -241,8 +233,8 @@ function iniciarPolling(pixId) {
     tentativas++;
 
     try {
-      const response = await fetch(`${BACKEND_URL}/status-pix/${pixId}`);
-      if (!response.ok) return; // ignora erro temporário
+      const response = await fetch(`/.netlify/functions/status-pix?id=${pixId}`);
+      if (!response.ok) return;
 
       const data = await response.json();
 
@@ -263,7 +255,7 @@ function iniciarPolling(pixId) {
 
     if (tentativas >= MAX_TENTATIVAS) pararPolling();
 
-  }, 5000); // a cada 5 segundos
+  }, 5000);
 }
 
 function pararPolling() {
