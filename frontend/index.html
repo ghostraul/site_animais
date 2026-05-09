@@ -106,6 +106,10 @@
     <span class="donation-label">Selecione o valor da doação</span>
 
     <div class="value-grid">
+      <button class="value-btn" onclick="selectAmount(10)">
+        <span class="impact-tip">Ração por 2 dias</span>
+        R$ 10
+      </button>
       <button class="value-btn" onclick="selectAmount(25)">
         <span class="impact-tip">~1 semana de ração</span>
         R$ 25
@@ -114,33 +118,29 @@
         <span class="impact-tip">Ração para 2 animais</span>
         R$ 50
       </button>
-      <button class="value-btn" onclick="selectAmount(75)">
-        <span class="impact-tip">Ração + vermífugo</span>
-        R$ 75
-      </button>
       <button class="value-btn" onclick="selectAmount(100)">
-        <span class="impact-tip">1 mês de ração</span>
+        <span class="impact-tip">1 mês de alimentação</span>
         R$ 100
       </button>
-      <button class="value-btn" onclick="selectAmount(150)">
-        <span class="impact-tip">Ração + vacina</span>
-        R$ 150
+      <button class="value-btn" onclick="selectAmount(200)">
+        <span class="impact-tip">Ração + vacina essencial</span>
+        R$ 200
       </button>
-      <button class="value-btn" onclick="selectAmount(250)">
-        <span class="impact-tip">Semana de abrigo</span>
-        R$ 250
+      <button class="value-btn" onclick="selectAmount(300)">
+        <span class="impact-tip">Semana de abrigo completo</span>
+        R$ 300
       </button>
       <button class="value-btn" onclick="selectAmount(500)">
         <span class="impact-tip">Consulta veterinária</span>
         R$ 500
       </button>
-      <button class="value-btn" onclick="selectAmount(750)">
-        <span class="impact-tip">Castração completa</span>
-        R$ 750
+      <button class="value-btn" onclick="selectAmount(700)">
+        <span class="impact-tip">Castração + recuperação</span>
+        R$ 700
       </button>
-      <button class="value-btn" onclick="selectAmount(1000)">
-        <span class="impact-tip">Tratamento de saúde</span>
-        R$ 1.000
+      <button class="value-btn" onclick="selectAmount(900)">
+        <span class="impact-tip">Tratamento completo de saúde</span>
+        R$ 900
       </button>
     </div>
 
@@ -315,7 +315,6 @@
     <h3>🐾 Confirme sua doação</h3>
     <p id="pix-desc">Sua doação fará uma diferença real!</p>
     <div class="pix-amount" id="pix-amount">R$ 0,00</div>
-    <div class="pix-qr" id="pix-qr">QR Code PIX<br/>(aguardando chave)</div>
     <div class="pix-key-box">
       <code id="pix-key">support@sosanimalhelp.org</code>
       <button class="btn-copy" onclick="copyPix()">Copiar</button>

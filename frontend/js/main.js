@@ -10,15 +10,15 @@ let pollingInterval = null;
 
 /* ── IMPACT DESCRIPTIONS ── */
 const impacts = {
-  25:   '~1 semana de ração para 1 animal',
-  50:   'Ração para 2 animais por 1 semana',
-  75:   'Ração + vermífugo para 1 animal',
-  100:  '1 mês completo de alimentação',
-  150:  'Ração + vacina essencial',
-  250:  'Semana de abrigo completo',
-  500:  'Consulta veterinária completa',
-  750:  'Castração e recuperação',
-  1000: 'Tratamento de saúde completo',
+  10:  'Ração por 2 dias para 1 animal',
+  25:  '~1 semana de ração para 1 animal',
+  50:  'Ração para 2 animais por 1 semana',
+  100: '1 mês completo de alimentação',
+  200: 'Ração + vacina essencial',
+  300: 'Semana de abrigo completo',
+  500: 'Consulta veterinária completa',
+  700: 'Castração e recuperação',
+  900: 'Tratamento completo de saúde',
 };
 
 /* ── FORMAT BRL ── */
@@ -39,11 +39,9 @@ function toCentavos(reais) {
    ══════════════════════════════════════════════════════ */
 function selectAmount(val) {
   selectedAmount = val;
-
   document.querySelectorAll('.value-btn').forEach(btn => {
     btn.classList.toggle('selected', btn.getAttribute('onclick') === `selectAmount(${val})`);
   });
-
   showOrderBump(val);
 }
 
@@ -55,18 +53,15 @@ function confirmDonate() {
   showOrderBump(selectedAmount);
 }
 
-
 /* ══════════════════════════════════════════════════════
    ORDER BUMP
    ══════════════════════════════════════════════════════ */
 function showOrderBump(val) {
   selectedAmount = val;
-
   document.getElementById('bump-amount-display').textContent = formatBRL(val);
   document.getElementById('bump-confirmed-text').textContent =
     'Sua doação de ' + formatBRL(val) + ' vai ' +
     (impacts[val] || 'ajudar animais em necessidade') + '!';
-
   document.getElementById('orderBump').classList.add('active');
   document.body.style.overflow = 'hidden';
 }
@@ -105,19 +100,21 @@ async function abrirPixModal(valorEmReais, label) {
       }),
     });
 
+    const pix = await response.json();
+
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Erro desconhecido');
+      throw new Error(pix.error || `Erro ${response.status}`);
     }
 
-    const pix = await response.json();
-    currentPixId = pix.id;
+    // Debug no console do browser — ajuda a diagnosticar problemas da API
+    console.log('[PIX] Resposta da API:', pix);
+    console.log('[PIX] Campos retornados pela Veno:', pix._debug_fields);
+    console.log('[PIX] qr_code_image (primeiros 100 chars):', String(pix.qr_code_image || '').substring(0, 100));
 
+    currentPixId = pix.id;
     preencherModalPix(pix, valorEmReais, label);
 
-    if (pix.id) {
-      iniciarPolling(pix.id);
-    }
+    if (pix.id) iniciarPolling(pix.id);
 
   } catch (err) {
     console.error('[abrirPixModal] Erro:', err);
@@ -130,8 +127,6 @@ function mostrarModalLoading(valorEmReais, label) {
   document.getElementById('pix-amount').textContent = formatBRL(valorEmReais);
   document.getElementById('pix-desc').textContent   = `Gerando PIX para ${label}...`;
   document.getElementById('pix-key').textContent    = 'Aguardando...';
-  document.getElementById('pix-qr').innerHTML       =
-    '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-size:0.82rem">⏳ Gerando QR Code...</div>';
 
   const btnCopy = document.querySelector('.btn-copy');
   if (btnCopy) { btnCopy.disabled = true; btnCopy.textContent = '...'; }
@@ -143,25 +138,10 @@ function mostrarModalLoading(valorEmReais, label) {
 /* ── Preenche o modal com dados reais do PIX ── */
 function preencherModalPix(pix, valorEmReais, label) {
   document.getElementById('pix-amount').textContent = formatBRL(valorEmReais);
-  document.getElementById('pix-desc').textContent   =
-    `Você está doando ${label}. Obrigado por salvar vidas! 🐾`;
+  document.getElementById('pix-desc').textContent =
+    `Você está doando para ${label}. Obrigado por salvar vidas! 🐾`;
 
   document.getElementById('pix-key').textContent = pix.pix_copy_paste || '';
-
-  if (pix.qr_code_image) {
-    // A API pode retornar base64 puro ou uma URL completa
-    const src = pix.qr_code_image.startsWith('http')
-      ? pix.qr_code_image
-      : `data:image/png;base64,${pix.qr_code_image}`;
-
-    document.getElementById('pix-qr').innerHTML =
-      `<img src="${src}"
-            style="width:200px;height:200px;border-radius:8px;"
-            alt="QR Code PIX"/>`;
-  } else {
-    document.getElementById('pix-qr').innerHTML =
-      '<span style="font-size:0.78rem;color:#aaa">QR Code indisponível<br/>Use o Copia e Cola</span>';
-  }
 
   const btnCopy = document.querySelector('.btn-copy');
   if (btnCopy) { btnCopy.disabled = false; btnCopy.textContent = 'Copiar'; }
@@ -169,8 +149,7 @@ function preencherModalPix(pix, valorEmReais, label) {
   if (pix.expires_at) {
     const expira = new Date(pix.expires_at);
     const hora   = expira.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const desc   = document.getElementById('pix-desc');
-    desc.textContent += ` (expira às ${hora})`;
+    document.getElementById('pix-desc').textContent += ` (expira às ${hora})`;
   }
 }
 
@@ -178,8 +157,6 @@ function preencherModalPix(pix, valorEmReais, label) {
 function mostrarErroModal(msg) {
   document.getElementById('pix-desc').textContent =
     '❌ Erro ao gerar PIX. Tente novamente ou entre em contato.';
-  document.getElementById('pix-qr').innerHTML =
-    `<span style="font-size:0.78rem;color:#c44e0d">${msg}</span>`;
 
   const btnCopy = document.querySelector('.btn-copy');
   if (btnCopy) { btnCopy.disabled = true; btnCopy.textContent = '—'; }
@@ -202,10 +179,10 @@ function copyPix() {
   navigator.clipboard.writeText(key).then(() => {
     const btn = document.querySelector('.btn-copy');
     const orig = btn.textContent;
-    btn.textContent     = '✓ Copiado!';
+    btn.textContent      = '✓ Copiado!';
     btn.style.background = '#1A7A6E';
     setTimeout(() => {
-      btn.textContent     = orig;
+      btn.textContent      = orig;
       btn.style.background = '';
     }, 2200);
   }).catch(() => {
@@ -220,56 +197,42 @@ function copyPix() {
 }
 
 /* ══════════════════════════════════════════════════════
-   POLLING — verifica se o PIX foi pago automaticamente
-   Consulta /.netlify/functions/status-pix a cada 5s
+   POLLING — verifica pagamento a cada 5s
    ══════════════════════════════════════════════════════ */
 function iniciarPolling(pixId) {
   pararPolling();
-
   let tentativas = 0;
-  const MAX_TENTATIVAS = 120; // 120 × 5s = 10 minutos
+  const MAX = 120;
 
   pollingInterval = setInterval(async () => {
     tentativas++;
-
     try {
-      const response = await fetch(`/.netlify/functions/status-pix?id=${pixId}`);
-      if (!response.ok) return;
-
-      const data = await response.json();
+      const r = await fetch(`/.netlify/functions/status-pix?id=${pixId}`);
+      if (!r.ok) return;
+      const data = await r.json();
 
       if (data.status === 'paid') {
         pararPolling();
         exibirPagamentoConfirmado(data);
       }
-
       if (data.status === 'expired' || data.status === 'cancelled') {
         pararPolling();
         document.getElementById('pix-desc').textContent =
           '⏰ Este PIX expirou. Feche e gere um novo.';
       }
+    } catch (_) {}
 
-    } catch (_) {
-      // silencia erros de rede durante polling
-    }
-
-    if (tentativas >= MAX_TENTATIVAS) pararPolling();
-
+    if (tentativas >= MAX) pararPolling();
   }, 5000);
 }
 
 function pararPolling() {
-  if (pollingInterval) {
-    clearInterval(pollingInterval);
-    pollingInterval = null;
-  }
+  if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
 }
 
 /* ── Tela de sucesso quando PIX é confirmado ── */
 function exibirPagamentoConfirmado(data) {
-  const modal = document.getElementById('pixModal');
-
-  modal.querySelector('.pix-box').innerHTML = `
+  document.getElementById('pixModal').querySelector('.pix-box').innerHTML = `
     <div style="text-align:center;padding:20px 0">
       <div style="font-size:4rem;margin-bottom:16px">✅</div>
       <h3 style="font-family:'Playfair Display',serif;font-size:1.6rem;color:#1C1C1C;margin-bottom:12px">
@@ -311,18 +274,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ══════════════════════════════════════════════════════
    SOCIAL PROOF — TOASTS DE DOAÇÕES
+   Sem foto — apenas nome, valor e tempo
    ══════════════════════════════════════════════════════ */
 const donors = [
-  { name: 'Ana C.',      city: 'São Paulo',      amount: 'R$ 50',  avatar: 'https://i.pravatar.cc/80?img=1'  },
-  { name: 'Rafael M.',   city: 'Belo Horizonte', amount: 'R$ 100', avatar: 'https://i.pravatar.cc/80?img=3'  },
-  { name: 'Juliana S.',  city: 'Curitiba',       amount: 'R$ 25',  avatar: 'https://i.pravatar.cc/80?img=5'  },
-  { name: 'Marcos L.',   city: 'Porto Alegre',   amount: 'R$ 150', avatar: 'https://i.pravatar.cc/80?img=7'  },
-  { name: 'Fernanda T.', city: 'Brasília',       amount: 'R$ 75',  avatar: 'https://i.pravatar.cc/80?img=9'  },
-  { name: 'Carlos R.',   city: 'Fortaleza',      amount: 'R$ 200', avatar: 'https://i.pravatar.cc/80?img=11' },
-  { name: 'Patrícia N.', city: 'Salvador',       amount: 'R$ 50',  avatar: 'https://i.pravatar.cc/80?img=13' },
-  { name: 'Thiago B.',   city: 'Recife',         amount: 'R$ 500', avatar: 'https://i.pravatar.cc/80?img=15' },
-  { name: 'Letícia G.',  city: 'Manaus',         amount: 'R$ 30',  avatar: 'https://i.pravatar.cc/80?img=17' },
-  { name: 'Diego F.',    city: 'Florianópolis',  amount: 'R$ 100', avatar: 'https://i.pravatar.cc/80?img=19' },
+  { name: 'Ana C.',      city: 'São Paulo',      amount: 'R$ 50'  },
+  { name: 'Juliana S.',  city: 'Curitiba',       amount: 'R$ 25'  },
+  { name: 'Fernanda T.', city: 'Brasília',       amount: 'R$ 100' },
+  { name: 'Patrícia N.', city: 'Salvador',       amount: 'R$ 50'  },
+  { name: 'Letícia G.',  city: 'Manaus',         amount: 'R$ 200' },
+  { name: 'Camila R.',   city: 'Recife',         amount: 'R$ 300' },
+  { name: 'Rafael M.',   city: 'Belo Horizonte', amount: 'R$ 100' },
+  { name: 'Marcos L.',   city: 'Porto Alegre',   amount: 'R$ 500' },
+  { name: 'Carlos R.',   city: 'Fortaleza',      amount: 'R$ 25'  },
+  { name: 'Thiago B.',   city: 'Florianópolis',  amount: 'R$ 700' },
+  { name: 'Diego F.',    city: 'Goiânia',        amount: 'R$ 300' },
+  { name: 'Bruno A.',    city: 'Belém',          amount: 'R$ 50'  },
 ];
 const timeLabels = ['agora mesmo', 'há 1 min', 'há 2 min', 'há 3 min', 'há 5 min'];
 
@@ -333,8 +299,6 @@ function showToast(donor) {
   const t = document.createElement('div');
   t.className = 'toast';
   t.innerHTML = `
-    <img class="toast-avatar" src="${donor.avatar}" alt="${donor.name}"
-         onerror="this.style.background='#E8651A'"/>
     <div>
       <strong>${donor.name} de ${donor.city}</strong>
       <span>doou ${donor.amount} — ${time} 🐾</span>
@@ -352,10 +316,11 @@ function startToasts() {
   let i = 0;
   const shuffled = [...donors].sort(() => Math.random() - 0.5);
 
-  setTimeout(() => showToast(shuffled[i++ % shuffled.length]), 2500);
+  // Primeiro toast em 5 segundos
+  setTimeout(() => showToast(shuffled[i++ % shuffled.length]), 5000);
 
+  // Demais a cada 30–40 segundos
   setInterval(() => {
-    const delay = 6000 + Math.random() * 8000;
-    setTimeout(() => showToast(shuffled[i++ % shuffled.length]), delay);
-  }, 9000);
+    setTimeout(() => showToast(shuffled[i++ % shuffled.length]), 30000 + Math.random() * 10000);
+  }, 35000);
 }

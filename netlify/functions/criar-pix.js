@@ -15,20 +15,20 @@ exports.handler = async function(event) {
       };
     }
 
+    const apiKey = process.env.VENO_API_KEY;
+    if (!apiKey) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'VENO_API_KEY não configurada nas variáveis de ambiente do Netlify.' }),
+      };
+    }
+
     const payload = JSON.stringify({
       amount: Math.round(Number(amount)),
       description: description || 'Doacao SOS Animal Help',
       external_id: `sos-${Date.now()}`,
       ...(process.env.WEBHOOK_URL ? { callback_url: process.env.WEBHOOK_URL } : {}),
     });
-
-    const apiKey = process.env.VENO_API_KEY;
-    if (!apiKey) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'Chave de API não configurada. Adicione VENO_API_KEY nas variáveis de ambiente do Netlify.' }),
-      };
-    }
 
     const data = await new Promise((resolve, reject) => {
       const options = {
@@ -55,10 +55,16 @@ exports.handler = async function(event) {
       });
 
       req.on('error', reject);
-      req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout')); });
+      req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout na API Veno')); });
       req.write(payload);
       req.end();
     });
+
+    // Log para debug (aparece nos logs do Netlify Functions)
+    console.log('[criar-pix] Status da API:', data.status);
+    console.log('[criar-pix] Campos retornados:', Object.keys(data.data || {}));
+    console.log('[criar-pix] qr_code_image tipo:', typeof data.data?.qr_code_image);
+    console.log('[criar-pix] qr_code_image valor (primeiros 80 chars):', String(data.data?.qr_code_image || '').substring(0, 80));
 
     if (data.status >= 400) {
       return {
@@ -67,15 +73,22 @@ exports.handler = async function(event) {
       };
     }
 
+    const qrRaw = data.data.qr_code_image || data.data.qrcode_image || data.data.qr_image || data.data.qrcode || '';
+
+    // Normaliza: remove prefixo data:image se vier da API já com ele
+    const qrClean = qrRaw.replace(/^data:image\/[a-z]+;base64,/, '');
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        id: data.data.id,
-        pix_copy_paste: data.data.pix_copy_paste,
-        qr_code_image: data.data.qr_code_image,
-        expires_at: data.data.expires_at,
-        amount: data.data.amount,
+        id:             data.data.id,
+        pix_copy_paste: data.data.pix_copy_paste || data.data.copy_paste || data.data.emv || '',
+        qr_code_image:  qrClean,
+        expires_at:     data.data.expires_at,
+        amount:         data.data.amount,
+        // Devolve os campos brutos para debug fácil
+        _debug_fields:  Object.keys(data.data),
       }),
     };
 
